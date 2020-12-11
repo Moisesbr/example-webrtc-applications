@@ -13,8 +13,8 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/pion/webrtc/v2"
-	"github.com/pion/webrtc/v2/pkg/media"
+	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v3/pkg/media"
 )
 
 func init() {
@@ -24,7 +24,7 @@ func init() {
 // Pipeline is a wrapper for a GStreamer Pipeline
 type Pipeline struct {
 	Pipeline  *C.GstElement
-	tracks    []*webrtc.Track
+	tracks    []*webrtc.TrackLocalStaticSample
 	id        int
 	codecName string
 	clockRate float32
@@ -40,36 +40,37 @@ const (
 )
 
 // CreatePipeline creates a GStreamer Pipeline
-func CreatePipeline(codecName string, tracks []*webrtc.Track, pipelineSrc string) *Pipeline {
+func CreatePipeline(codecName string, tracks []*webrtc.TrackLocalStaticSample, pipelineSrc string) *Pipeline {
 	pipelineStr := "appsink name=appsink"
 	var clockRate float32
 
-	switch codecName {
-	case webrtc.VP8:
+	switch {
+	case codecName == "VP8":
 		pipelineStr = pipelineSrc + " ! vp8enc error-resilient=partitions keyframe-max-dist=10 auto-alt-ref=true cpu-used=5 deadline=1 ! " + pipelineStr
 		clockRate = videoClockRate
 
-	case webrtc.VP9:
+	case codecName == "VP9":
 		pipelineStr = pipelineSrc + " ! vp9enc ! " + pipelineStr
 		clockRate = videoClockRate
 
-	case webrtc.H264:
+	case codecName == "H264":
 		pipelineStr = pipelineSrc + " ! video/x-raw,format=I420 ! x264enc speed-preset=ultrafast tune=zerolatency key-int-max=20 ! video/x-h264,stream-format=byte-stream ! " + pipelineStr
 		clockRate = videoClockRate
 
-	case webrtc.Opus:
+	case codecName == "Opus":
+		fmt.Println("using Opus +------------->")
 		pipelineStr = pipelineSrc + " ! opusenc ! " + pipelineStr
 		clockRate = audioClockRate
 
-	case webrtc.G722:
+	case codecName == "G722":
 		pipelineStr = pipelineSrc + " ! avenc_g722 ! " + pipelineStr
 		clockRate = audioClockRate
 
-	case webrtc.PCMU:
+	case codecName == "PCMU":
 		pipelineStr = pipelineSrc + " ! audio/x-raw, rate=8000 ! mulawenc ! " + pipelineStr
 		clockRate = pcmClockRate
 
-	case webrtc.PCMA:
+	case codecName == "PCMA":
 		pipelineStr = pipelineSrc + " ! audio/x-raw, rate=8000 ! alawenc ! " + pipelineStr
 		clockRate = pcmClockRate
 
@@ -112,9 +113,9 @@ func goHandlePipelineBuffer(buffer unsafe.Pointer, bufferLen C.int, duration C.i
 	pipelinesLock.Unlock()
 
 	if ok {
-		samples := uint32(pipeline.clockRate * (float32(duration) / 1000000000))
+		// samples := uint32(pipeline.clockRate * (float32(duration) / 1000000000))
 		for _, t := range pipeline.tracks {
-			if err := t.WriteSample(media.Sample{Data: C.GoBytes(buffer, bufferLen), Samples: samples}); err != nil {
+			if err := t.WriteSample(media.Sample{Data: C.GoBytes(buffer, bufferLen)}); err != nil {
 				panic(err)
 			}
 		}
